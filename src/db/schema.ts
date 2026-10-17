@@ -8,14 +8,15 @@ import {
   timestamp,
   pgEnum,
   index,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 /**
- * NetGuard V0 User Roles
+ * NetGuard User Roles
  * - ADMIN: Full access (User management, system config, all security operations)
- * - ANALYST: Security event ingestion, telemetry exploration, filtering
- * - VIEWER: Read-only access to security event telemetry
+ * - ANALYST: Security event ingestion, alert/incident operations, investigation
+ * - VIEWER: Read-only access to security event telemetry and operational views
  */
 export const userRoleEnum = pgEnum('user_role', ['ADMIN', 'ANALYST', 'VIEWER']);
 
@@ -87,3 +88,145 @@ export const securityEvents = pgTable(
 
 export type SecurityEvent = InferSelectModel<typeof securityEvents>;
 export type NewSecurityEvent = InferInsertModel<typeof securityEvents>;
+
+/**
+ * NetGuard V1 Alert Enums
+ */
+export const alertSeverityEnum = pgEnum('alert_severity', ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+export const alertStatusEnum = pgEnum('alert_status', ['NEW', 'IN_PROGRESS', 'RESOLVED', 'DISMISSED']);
+
+export type AlertSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+export type AlertStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'DISMISSED';
+
+/**
+ * NetGuard V1 Alerts Entity
+ * Actionable alerts promoted from raw security events or created by operators
+ */
+export const alerts = pgTable(
+  'alerts',
+  {
+    id: serial('id').primaryKey(),
+    // Optional link to underlying raw Snort security event
+    securityEventId: integer('security_event_id').references(() => securityEvents.id, { onDelete: 'set null' }),
+    // Actionable alert title
+    title: varchar('title', { length: 255 }).notNull(),
+    // Context or investigation summary
+    description: text('description'),
+    // Actionable severity rating
+    severity: alertSeverityEnum('severity').notNull(),
+    // Operational triage status
+    status: alertStatusEnum('status').notNull().default('NEW'),
+    // Host IP endpoints
+    sourceIp: varchar('source_ip', { length: 64 }).notNull(),
+    destinationIp: varchar('destination_ip', { length: 64 }).notNull(),
+    // Snort Signature ID
+    signatureId: integer('signature_id').notNull(),
+    // Timestamps
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_alerts_status').on(table.status),
+    index('idx_alerts_severity').on(table.severity),
+    index('idx_alerts_source_ip').on(table.sourceIp),
+    index('idx_alerts_event_id').on(table.securityEventId),
+  ]
+);
+
+export type Alert = InferSelectModel<typeof alerts>;
+export type NewAlert = InferInsertModel<typeof alerts>;
+
+/**
+ * NetGuard V1 Incident Enums
+ */
+export const incidentSeverityEnum = pgEnum('incident_severity', ['SEV1', 'SEV2', 'SEV3', 'SEV4']);
+export const incidentStatusEnum = pgEnum('incident_status', ['OPEN', 'INVESTIGATING', 'CONTAINED', 'RESOLVED', 'CLOSED']);
+
+export type IncidentSeverity = 'SEV1' | 'SEV2' | 'SEV3' | 'SEV4';
+export type IncidentStatus = 'OPEN' | 'INVESTIGATING' | 'CONTAINED' | 'RESOLVED' | 'CLOSED';
+
+/**
+ * NetGuard V1 Incidents Entity
+ */
+export const incidents = pgTable(
+  'incidents',
+  {
+    id: serial('id').primaryKey(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description').notNull(),
+    severity: incidentSeverityEnum('severity').notNull(),
+    status: incidentStatusEnum('status').notNull().default('OPEN'),
+    assignedTo: integer('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolutionSummary: text('resolution_summary'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_incidents_status').on(table.status),
+    index('idx_incidents_severity').on(table.severity),
+    index('idx_incidents_assigned_to').on(table.assignedTo),
+  ]
+);
+
+export type Incident = InferSelectModel<typeof incidents>;
+export type NewIncident = InferInsertModel<typeof incidents>;
+
+/**
+ * NetGuard V1 Incident-Alerts Junction Entity
+ */
+export const incidentAlerts = pgTable(
+  'incident_alerts',
+  {
+    incidentId: integer('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    alertId: integer('alert_id')
+      .notNull()
+      .references(() => alerts.id, { onDelete: 'cascade' }),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+    addedBy: integer('added_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.incidentId, table.alertId] }),
+  ]
+);
+
+export type IncidentAlert = InferSelectModel<typeof incidentAlerts>;
+export type NewIncidentAlert = InferInsertModel<typeof incidentAlerts>;
+
+/**
+ * NetGuard V1 Investigation Entry Enums & Entity
+ */
+export const investigationEntryTypeEnum = pgEnum('investigation_entry_type', [
+  'NOTE',
+  'ACTION_TAKEN',
+  'CONTAINMENT',
+  'EVIDENCE',
+]);
+
+export type InvestigationEntryType = 'NOTE' | 'ACTION_TAKEN' | 'CONTAINMENT' | 'EVIDENCE';
+
+export const investigationEntries = pgTable(
+  'investigation_entries',
+  {
+    id: serial('id').primaryKey(),
+    incidentId: integer('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
+    entryType: investigationEntryTypeEnum('entry_type').notNull().default('NOTE'),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_investigation_incident').on(table.incidentId),
+    index('idx_investigation_created').on(table.createdAt),
+  ]
+);
+
+export type InvestigationEntry = InferSelectModel<typeof investigationEntries>;
+export type NewInvestigationEntry = InferInsertModel<typeof investigationEntries>;
+
+

@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { Badge } from '../ui/badge.tsx';
 import { Button } from '../ui/button.tsx';
-import { Shield, Activity, Users, FileCode2, LogOut, ShieldAlert } from 'lucide-react';
+import { Shield, Activity, Users, FileCode2, LogOut, ShieldAlert, Bell, Flame } from 'lucide-react';
 
 export interface NavbarProps {
-  currentTab: 'overview' | 'events' | 'admin' | 'docs';
-  onSelectTab: (tab: 'overview' | 'events' | 'admin' | 'docs') => void;
+  currentTab: 'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs';
+  onSelectTab: (tab: 'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
@@ -61,7 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="font-bold tracking-tight text-zinc-100 text-sm">NetGuard</span>
-              <span className="text-[10px] font-mono text-zinc-500 uppercase px-1 py-0.2 bg-zinc-900 border border-zinc-800 rounded">V0</span>
+              <span className="text-[10px] font-mono text-zinc-400 font-semibold uppercase px-1 py-0.2 bg-zinc-900 border border-zinc-700 rounded">V1</span>
             </div>
           </div>
 
@@ -76,7 +76,31 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
               }`}
             >
               <Activity className="h-3.5 w-3.5" />
-              <span>Overview</span>
+              <span>Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => onSelectTab('alerts')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                currentTab === 'alerts'
+                  ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Bell className="h-3.5 w-3.5 text-amber-400" />
+              <span>Alerts</span>
+            </button>
+
+            <button
+              onClick={() => onSelectTab('incidents')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                currentTab === 'incidents'
+                  ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Flame className="h-3.5 w-3.5 text-red-400" />
+              <span>Incidents</span>
             </button>
 
             <button

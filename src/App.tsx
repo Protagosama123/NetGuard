@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { AuthView } from './components/auth/AuthView.tsx';
 import { Navbar } from './components/layout/Navbar.tsx';
-import { OverviewView } from './components/dashboard/OverviewView.tsx';
+import { SocDashboardView } from './components/dashboard/SocDashboardView.tsx';
 import { SecurityEventsView } from './components/events/SecurityEventsView.tsx';
+import { AlertsView } from './components/alerts/AlertsView.tsx';
+import { IncidentsView } from './components/incidents/IncidentsView.tsx';
 import { UserAdminView } from './components/admin/UserAdminView.tsx';
 import { ApiDocsView } from './components/docs/ApiDocsView.tsx';
 import { Shield } from 'lucide-react';
 
 function MainApp() {
   const { user, loading } = useAuth();
-  const [currentTab, setCurrentTab] = useState<'overview' | 'events' | 'admin' | 'docs'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs'>('overview');
 
   if (loading) {
     return (
@@ -28,7 +30,7 @@ function MainApp() {
   }
 
   // Guard against non-admin manually selecting admin tab
-  const handleSelectTab = (tab: 'overview' | 'events' | 'admin' | 'docs') => {
+  const handleSelectTab = (tab: 'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs') => {
     if (tab === 'admin' && user.role !== 'ADMIN') {
       setCurrentTab('overview');
       return;
@@ -42,7 +44,15 @@ function MainApp() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {currentTab === 'overview' && (
-          <OverviewView onNavigate={handleSelectTab} />
+          <SocDashboardView onNavigate={handleSelectTab} />
+        )}
+
+        {currentTab === 'alerts' && (
+          <AlertsView />
+        )}
+
+        {currentTab === 'incidents' && (
+          <IncidentsView />
         )}
 
         {currentTab === 'events' && (
@@ -58,8 +68,8 @@ function MainApp() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-800/80 py-4 text-center text-xs text-zinc-600 font-mono">
-        NetGuard V0 &mdash; Snort Telemetry Management & RBAC Console
+      <footer className="border-t border-zinc-800/80 py-4 text-center text-xs text-zinc-500 font-mono">
+        NetGuard V1 &mdash; Snort Telemetry Management, Alert Triage & Incident Response Console
       </footer>
     </div>
   );

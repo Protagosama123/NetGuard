@@ -1,6 +1,6 @@
 {
   "name": "NetGuard",
-  "description": "Network Security Management & Telemetry Ingestion Platform (V0)",
+  "description": "Network Security Management, Alert Triage & Incident Response Platform (V1)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

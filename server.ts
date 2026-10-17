@@ -6,6 +6,8 @@ import { initializeDatabase } from './src/db/index.ts';
 import { authRouter } from './src/server/auth/auth.controller.ts';
 import { usersRouter } from './src/server/users/users.controller.ts';
 import { eventsRouter } from './src/server/events/events.controller.ts';
+import { alertsRouter } from './src/server/alerts/alerts.controller.ts';
+import { incidentsRouter } from './src/server/incidents/incidents.controller.ts';
 import { docsRouter } from './src/server/docs/swagger.ts';
 
 dotenv.config();
@@ -47,6 +49,12 @@ export async function createServer() {
   // Security Events & Snort Telemetry API routes
   app.use('/api/events', eventsRouter);
 
+  // Operational Alerts API routes (V1)
+  app.use('/api/alerts', alertsRouter);
+
+  // Security Incidents API routes (V1)
+  app.use('/api/incidents', incidentsRouter);
+
   // OpenAPI / Swagger Documentation
   app.use('/api/docs', docsRouter);
 
@@ -54,7 +62,10 @@ export async function createServer() {
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

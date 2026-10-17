@@ -71,6 +71,17 @@ export class EventsService {
     };
 
     const [createdEvent] = await db.insert(securityEvents).values(newRecord).returning();
+
+    // V1 Auto-Promotion Rule: High and Medium priority detections (priority <= 2) produce actionable Alerts
+    if (createdEvent.priority <= 2) {
+      try {
+        const { AlertsService } = await import('../alerts/alerts.service.ts');
+        await AlertsService.createAlertFromEvent(createdEvent);
+      } catch (err) {
+        console.warn('[EventsService] Failed to auto-create alert for security event:', err);
+      }
+    }
+
     return createdEvent;
   }
 
@@ -101,7 +112,22 @@ export class EventsService {
       };
     });
 
-    return db.insert(securityEvents).values(records).returning();
+    const createdEvents = await db.insert(securityEvents).values(records).returning();
+
+    // V1 Auto-Promotion Rule for batch
+    try {
+      const eligibleEvents = createdEvents.filter((e) => e.priority <= 2);
+      if (eligibleEvents.length > 0) {
+        const { AlertsService } = await import('../alerts/alerts.service.ts');
+        for (const ev of eligibleEvents) {
+          await AlertsService.createAlertFromEvent(ev);
+        }
+      }
+    } catch (err) {
+      console.warn('[EventsService] Failed to auto-create alerts for batch:', err);
+    }
+
+    return createdEvents;
   }
 
   /**
