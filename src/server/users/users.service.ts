@@ -1,6 +1,7 @@
 import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../db/index.ts';
 import { users, type UserRole } from '../../db/schema.ts';
+import { AuditService } from '../audit/audit.service.ts';
 
 export class UsersService {
   /**
@@ -64,6 +65,18 @@ export class UsersService {
       .where(eq(users.id, targetUserId))
       .returning();
 
+    await AuditService.logAction({
+      actorId: requestingAdminId,
+      action: 'USER_ROLE_CHANGED',
+      targetEntity: 'user',
+      targetId: targetUserId,
+      details: {
+        targetEmail: targetUser.email,
+        previousRole: targetUser.role,
+        newRole,
+      },
+    });
+
     return {
       id: updated.id,
       email: updated.email,
@@ -112,6 +125,18 @@ export class UsersService {
       })
       .where(eq(users.id, targetUserId))
       .returning();
+
+    await AuditService.logAction({
+      actorId: requestingAdminId,
+      action: 'USER_STATUS_CHANGED',
+      targetEntity: 'user',
+      targetId: targetUserId,
+      details: {
+        targetEmail: targetUser.email,
+        previousStatus: targetUser.isActive,
+        newStatus: isActive,
+      },
+    });
 
     return {
       id: updated.id,

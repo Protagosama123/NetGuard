@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { UsersService } from './users.service.ts';
+import { AuditService } from '../audit/audit.service.ts';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.ts';
 import type { UserRole } from '../../db/schema.ts';
 
@@ -15,6 +16,25 @@ const UpdateRoleSchema = z.object({
 
 const UpdateStatusSchema = z.object({
   isActive: z.boolean(),
+});
+
+/**
+ * GET /api/users/audit
+ * Admin-only: Retrieve administrative audit logs
+ */
+usersRouter.get('/audit', async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+    const logs = await AuditService.getAuditLogs(limit, offset);
+    res.status(200).json({
+      success: true,
+      data: logs,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to retrieve audit logs';
+    res.status(500).json({ success: false, error: message });
+  }
 });
 
 /**

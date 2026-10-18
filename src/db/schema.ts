@@ -229,4 +229,29 @@ export const investigationEntries = pgTable(
 export type InvestigationEntry = InferSelectModel<typeof investigationEntries>;
 export type NewInvestigationEntry = InferInsertModel<typeof investigationEntries>;
 
+/**
+ * NetGuard V2.2 Administrative Audit Logs Entity
+ */
+export const auditLogs = pgTable(
+  'audit_logs',
+  {
+    id: serial('id').primaryKey(),
+    actorId: integer('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    actorEmail: varchar('actor_email', { length: 255 }),
+    action: varchar('action', { length: 100 }).notNull(),
+    targetEntity: varchar('target_entity', { length: 100 }).notNull(),
+    targetId: integer('target_id'),
+    details: text('details'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_audit_actor').on(table.actorId),
+    index('idx_audit_action').on(table.action),
+    index('idx_audit_created').on(table.createdAt),
+  ]
+);
+
+export type AuditLog = InferSelectModel<typeof auditLogs>;
+export type NewAuditLog = InferInsertModel<typeof auditLogs>;
+
 

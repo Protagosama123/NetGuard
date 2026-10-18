@@ -266,6 +266,23 @@ export async function initializeDatabase(): Promise<void> {
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_investigation_incident ON investigation_entries (incident_id);`);
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_investigation_created ON investigation_entries (created_at);`);
 
+  // Create audit_logs table
+  await database.execute(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      actor_email VARCHAR(255),
+      action VARCHAR(100) NOT NULL,
+      target_entity VARCHAR(100) NOT NULL,
+      target_id INTEGER,
+      details TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs (actor_id);`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action);`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs (created_at);`);
+
   // Seed default admin user if not present
   try {
     const adminCheck = await database.execute(`SELECT id FROM users WHERE email = 'lead_admin@netguard.local' LIMIT 1;`);

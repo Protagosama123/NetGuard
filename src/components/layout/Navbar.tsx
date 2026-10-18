@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useRealtime } from '../../context/RealtimeContext.tsx';
 import { Badge } from '../ui/badge.tsx';
 import { Button } from '../ui/button.tsx';
-import { Shield, Activity, Users, FileCode2, LogOut, ShieldAlert, Bell, Flame } from 'lucide-react';
+import { Shield, Activity, Users, FileCode2, LogOut, ShieldAlert, Bell, Flame, Wifi, WifiOff } from 'lucide-react';
 
 export interface NavbarProps {
   currentTab: 'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs';
@@ -11,6 +12,7 @@ export interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
   const { user, logout } = useAuth();
+  const { status: realtimeStatus, reconnect } = useRealtime();
   const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="font-bold tracking-tight text-zinc-100 text-sm">NetGuard</span>
-              <span className="text-[10px] font-mono text-zinc-400 font-semibold uppercase px-1 py-0.2 bg-zinc-900 border border-zinc-700 rounded">V1</span>
+              <span className="text-[10px] font-mono text-zinc-300 font-semibold uppercase px-1 py-0.2 bg-zinc-900 border border-zinc-700 rounded">V2.2</span>
             </div>
           </div>
 
@@ -146,18 +148,38 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
 
         {/* Right User & System Status */}
         <div className="flex items-center gap-3">
-          {/* Health indicator */}
-          <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 px-2.5 py-1 rounded-full bg-zinc-900/60 border border-zinc-800">
+          {/* Realtime Socket Status Indicator */}
+          <div
+            onClick={realtimeStatus !== 'CONNECTED' ? reconnect : undefined}
+            className={`hidden sm:flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-full border transition-colors select-none ${
+              realtimeStatus !== 'CONNECTED' ? 'cursor-pointer hover:bg-zinc-800' : ''
+            } ${
+              realtimeStatus === 'CONNECTED'
+                ? 'text-emerald-400 bg-emerald-950/30 border-emerald-800/40'
+                : realtimeStatus === 'RECONNECTING' || realtimeStatus === 'CONNECTING'
+                ? 'text-amber-400 bg-amber-950/30 border-amber-800/40'
+                : 'text-zinc-400 bg-zinc-900/60 border-zinc-800'
+            }`}
+            title={realtimeStatus !== 'CONNECTED' ? 'Click to reconnect realtime socket' : 'Connected to NetGuard SOC Realtime Gateway'}
+          >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
-                backendHealthy === true
-                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]'
-                  : backendHealthy === false
-                  ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]'
+                realtimeStatus === 'CONNECTED'
+                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse'
+                  : realtimeStatus === 'RECONNECTING' || realtimeStatus === 'CONNECTING'
+                  ? 'bg-amber-400 animate-ping'
                   : 'bg-zinc-500'
               }`}
             />
-            <span>{backendHealthy ? 'TELEMETRY LIVE' : 'CONNECTING'}</span>
+            <span>
+              {realtimeStatus === 'CONNECTED'
+                ? 'REALTIME LIVE'
+                : realtimeStatus === 'RECONNECTING'
+                ? 'RECONNECTING...'
+                : realtimeStatus === 'CONNECTING'
+                ? 'CONNECTING...'
+                : 'SOCKET OFFLINE'}
+            </span>
           </div>
 
           {/* User & Role Badge */}

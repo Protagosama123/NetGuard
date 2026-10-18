@@ -9,6 +9,7 @@ import {
   type AlertStatus,
   type SecurityEvent,
 } from '../../db/schema.ts';
+import { RealtimeGateway } from '../realtime/gateway.ts';
 
 export interface AlertQueryFilter {
   page?: number;
@@ -102,6 +103,9 @@ export class AlertsService {
     };
 
     const [created] = await db.insert(alerts).values(newRecord).returning();
+    try {
+      RealtimeGateway.getInstance().broadcast('alert:created', created);
+    } catch {}
     return created;
   }
 
@@ -144,6 +148,9 @@ export class AlertsService {
     };
 
     const [created] = await db.insert(alerts).values(newRecord).returning();
+    try {
+      RealtimeGateway.getInstance().broadcast('alert:created', created);
+    } catch {}
     return created;
   }
 
@@ -278,6 +285,14 @@ export class AlertsService {
       })
       .where(eq(alerts.id, id))
       .returning();
+
+    try {
+      RealtimeGateway.getInstance().broadcast('alert:status_changed', {
+        id: updated.id,
+        status: updated.status,
+        updatedAt: updated.updatedAt.toISOString(),
+      });
+    } catch {}
 
     return updated;
   }

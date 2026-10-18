@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useRealtime } from '../../context/RealtimeContext.tsx';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../ui/card.tsx';
 import { Badge } from '../ui/badge.tsx';
 import { Button } from '../ui/button.tsx';
@@ -11,37 +12,39 @@ import {
   ArrowRight,
   ShieldCheck,
   CheckCircle,
-  AlertCircle,
   Clock,
   Eye,
   RefreshCw,
-  PlusCircle,
   Radio,
+  Timer,
+  TrendingUp,
 } from 'lucide-react';
-import type { IncidentSeverity, IncidentStatus, AlertSeverity, AlertStatus } from '../../db/schema.ts';
+import { AnalyticsTrendsChart } from './AnalyticsTrendsChart.tsx';
+import type { AnalyticsTimeRange, AnalyticsSummary, AnalyticsTrends, AnalyticsMttdDetails } from '../../server/analytics/analytics.service.ts';
 
 export interface SocDashboardViewProps {
   onNavigate: (tab: 'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs') => void;
-  onInspectIncident?: (incidentId: number) => void;
-  onInspectAlert?: (alertId: number) => void;
 }
 
-export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
-  onNavigate,
-}) => {
+export const SocDashboardView: React.FC<SocDashboardViewProps> = ({ onNavigate }) => {
   const { user, token } = useAuth();
+  const { subscribe } = useRealtime();
 
-  // Metrics
-  const [incidentStats, setIncidentStats] = useState<any>(null);
-  const [alertStats, setAlertStats] = useState<any>(null);
-  const [eventStats, setEventStats] = useState<any>(null);
+  // Time Range Filter
+  const [timeRange, setTimeRange] = useState<AnalyticsTimeRange>('24h');
 
-  // Recent feeds
+  // Analytics Metrics (V2.1)
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [trends, setTrends] = useState<AnalyticsTrends | null>(null);
+  const [mttdDetails, setMttdDetails] = useState<AnalyticsMttdDetails | null>(null);
+
+  // Operational feeds
   const [activeIncidents, setActiveIncidents] = useState<any[]>([]);
   const [urgentAlerts, setUrgentAlerts] = useState<any[]>([]);
 
-  // State
+  // UI state
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [ingestingSample, setIngestingSample] = useState(false);
   const [ingestSuccess, setIngestSuccess] = useState<string | null>(null);
 
@@ -51,28 +54,29 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
     if (!token) return;
     try {
       setLoading(true);
+      setError(null);
 
-      const [incStatsRes, alertStatsRes, eventStatsRes, incListRes, alertListRes] = await Promise.all([
-        fetch('/api/incidents/stats', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/alerts/stats', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/events/stats', { headers: { Authorization: `Bearer ${token}` } }),
+      const [summaryRes, trendsRes, mttdRes, incListRes, alertListRes] = await Promise.all([
+        fetch(`/api/analytics/summary?timeRange=${timeRange}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/analytics/trends?timeRange=${timeRange}&entity=all`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/analytics/mttd?timeRange=${timeRange}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/incidents?limit=5', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/alerts?limit=5&status=NEW', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
-      if (incStatsRes.ok) {
-        const json = await incStatsRes.json();
-        if (json.success) setIncidentStats(json.data);
+      if (summaryRes.ok) {
+        const json = await summaryRes.json();
+        if (json.success) setSummary(json.data);
       }
 
-      if (alertStatsRes.ok) {
-        const json = await alertStatsRes.json();
-        if (json.success) setAlertStats(json.data);
+      if (trendsRes.ok) {
+        const json = await trendsRes.json();
+        if (json.success) setTrends(json.data);
       }
 
-      if (eventStatsRes.ok) {
-        const json = await eventStatsRes.json();
-        if (json.success) setEventStats(json.data);
+      if (mttdRes.ok) {
+        const json = await mttdRes.json();
+        if (json.success) setMttdDetails(json.data);
       }
 
       if (incListRes.ok) {
@@ -84,16 +88,46 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
         const json = await alertListRes.json();
         if (json.success) setUrgentAlerts(json.data || []);
       }
-    } catch (err) {
-      console.error('Failed to load SOC dashboard metrics:', err);
+    } catch (err: any) {
+      console.error('Failed to load SOC dashboard analytics:', err);
+      setError(err.message || 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, timeRange]);
 
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  // Realtime subscription & mandatory resync
+  useEffect(() => {
+    const unsubscribe = subscribe('*', (msg) => {
+      // Optimistic updates
+      if (msg.event === 'alert:created' && msg.data) {
+        setUrgentAlerts((prev) => {
+          if (prev.some((a) => a.id === msg.data.id)) return prev;
+          return [msg.data, ...prev].slice(0, 5);
+        });
+      } else if (msg.event === 'alert:status_changed' && msg.data) {
+        setUrgentAlerts((prev) => prev.filter((a) => a.id !== msg.data.id || msg.data.status === 'NEW'));
+      } else if (msg.event === 'incident:created' && msg.data) {
+        setActiveIncidents((prev) => {
+          if (prev.some((i) => i.id === msg.data.id)) return prev;
+          return [msg.data, ...prev].slice(0, 5);
+        });
+      } else if (msg.event === 'incident:status_changed' && msg.data) {
+        setActiveIncidents((prev) =>
+          prev.map((inc) => (inc.id === msg.data.id ? { ...inc, status: msg.data.status } : inc))
+        );
+      }
+
+      // Mandatory full REST resync / refresh metrics
+      fetchDashboardData();
+    });
+
+    return unsubscribe;
+  }, [subscribe, fetchDashboardData]);
 
   // Quick ingest sample Snort alert
   const handleIngestSample = async () => {
@@ -185,9 +219,17 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
     }
   };
 
+  const formatMttdLatency = (sec: number | null) => {
+    if (sec === null) return 'N/A';
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const remS = Math.round(sec % 60);
+    return `${m}m ${remS}s`;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top Banner / System Greeting */}
+      {/* Top Banner / System Greeting & Time Range Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
@@ -195,11 +237,28 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
             Security Operations Command Center
           </h1>
           <p className="text-xs text-zinc-400 font-mono">
-            NetGuard V1 &bull; Active Sensor Ingestion & Triage Matrix
+            NetGuard V2.1 &bull; SOC Analytics, Triage Matrix & MTTD Performance
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Time Range Selector */}
+          <div className="inline-flex rounded-lg bg-zinc-900 border border-zinc-800 p-0.5 font-mono text-xs">
+            {(['24h', '7d', '30d'] as AnalyticsTimeRange[]).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer text-xs font-semibold ${
+                  timeRange === range
+                    ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+
           {canManage && (
             <Button
               variant="outline"
@@ -210,7 +269,7 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
               title="Simulate incoming Snort IDS alert"
             >
               <Radio className={`h-3.5 w-3.5 text-red-400 ${ingestingSample ? 'animate-ping' : ''}`} />
-              <span>Simulate Snort Alert</span>
+              <span>Simulate Alert</span>
             </Button>
           )}
 
@@ -228,6 +287,15 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
         </div>
       </div>
 
+      {error && (
+        <div className="p-3 bg-red-950/40 border border-red-800/60 rounded-md text-xs text-red-300 flex items-center justify-between">
+          <span>{error}</span>
+          <Button variant="ghost" size="sm" onClick={fetchDashboardData} className="h-6 text-xs text-red-300">
+            Retry
+          </Button>
+        </div>
+      )}
+
       {ingestSuccess && (
         <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-md text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in">
           <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
@@ -235,9 +303,9 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
         </div>
       )}
 
-      {/* 4 Primary SOC KPI Cards */}
+      {/* 4 Primary SOC KPI Cards (Powered by V2.1 Analytics Summary) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Active Incidents */}
+        {/* Active Incidents & Unassigned Queue */}
         <Card className="bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 transition-colors">
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between text-zinc-400 text-xs">
@@ -246,7 +314,7 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold font-mono text-zinc-100">
-                {incidentStats ? incidentStats.active : 0}
+                {summary ? summary.incidents.active : 0}
               </span>
               <Button
                 variant="ghost"
@@ -258,39 +326,12 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
                 <ArrowRight className="h-3 w-3" />
               </Button>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60">
-              <span className="text-red-400 font-semibold">{incidentStats?.bySeverity?.sev1 || 0} SEV1</span>
+            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60">
+              <span className="text-amber-400 font-semibold">{summary?.incidents.unassigned || 0} unassigned</span>
               <span>&bull;</span>
-              <span className="text-orange-400">{incidentStats?.bySeverity?.sev2 || 0} SEV2</span>
+              <span className="text-red-400">{summary?.incidents.bySeverity.sev1 || 0} SEV1</span>
               <span>&bull;</span>
-              <span className="text-zinc-400">{incidentStats?.total || 0} total cases</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Unassigned Incident Queue */}
-        <Card className="bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 transition-colors">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center justify-between text-zinc-400 text-xs">
-              <span className="font-mono uppercase text-[10px] tracking-wider">Unassigned Queue</span>
-              <Clock className="h-4 w-4 text-amber-400" />
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold font-mono text-amber-300">
-                {incidentStats ? incidentStats.unassigned : 0}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onNavigate('incidents')}
-                className="h-6 px-2 text-[11px] text-zinc-400 hover:text-zinc-100 flex items-center gap-1"
-              >
-                <span>Triage</span>
-                <ArrowRight className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60">
-              <span>Awaiting lead investigator assignment</span>
+              <span className="text-zinc-400">{summary?.incidents.total || 0} in {timeRange}</span>
             </div>
           </CardContent>
         </Card>
@@ -304,7 +345,7 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold font-mono text-zinc-100">
-                {alertStats ? alertStats.byStatus?.new + alertStats.byStatus?.inProgress : 0}
+                {summary ? summary.alerts.open : 0}
               </span>
               <Button
                 variant="ghost"
@@ -316,26 +357,53 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
                 <ArrowRight className="h-3 w-3" />
               </Button>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60">
-              <span className="text-red-400">{alertStats?.bySeverity?.critical || 0} Critical</span>
+            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60">
+              <span className="text-red-400">{summary?.alerts.bySeverity.critical || 0} Crit</span>
               <span>&bull;</span>
-              <span className="text-amber-400">{alertStats?.bySeverity?.high || 0} High</span>
+              <span className="text-amber-400">{summary?.alerts.bySeverity.high || 0} High</span>
               <span>&bull;</span>
-              <span className="text-zinc-400">{alertStats?.total || 0} total</span>
+              <span className="text-zinc-400">{summary?.alerts.total || 0} in {timeRange}</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Raw Telemetry Ingested */}
+        {/* Mean Time to Detect (MTTD) */}
+        <Card className="bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 transition-colors">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center justify-between text-zinc-400 text-xs">
+              <span className="font-mono uppercase text-[10px] tracking-wider">MTTD (Detection Latency)</span>
+              <Timer className="h-4 w-4 text-sky-400" />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold font-mono text-zinc-100">
+                {formatMttdLatency(summary?.mttd.averageSeconds ?? null)}
+              </span>
+              <Badge
+                variant={summary?.mttd.status === 'available' ? 'success' : 'secondary'}
+                className="text-[10px]"
+              >
+                {summary?.mttd.status === 'available' ? 'AVAILABLE' : 'INSUFFICIENT DATA'}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60">
+              <span>{summary?.mttd.sampleCount || 0} calibrated samples</span>
+              {mttdDetails?.medianSeconds !== null && mttdDetails?.medianSeconds !== undefined && (
+                <span>Median: {mttdDetails.medianSeconds}s</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Snort Telemetry Ingestion */}
         <Card className="bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 transition-colors">
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center justify-between text-zinc-400 text-xs">
               <span className="font-mono uppercase text-[10px] tracking-wider">Snort Telemetry</span>
-              <ShieldAlert className="h-4 w-4 text-sky-400" />
+              <ShieldAlert className="h-4 w-4 text-emerald-400" />
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-bold font-mono text-zinc-100">
-                {eventStats ? eventStats.total : 0}
+                {summary ? summary.telemetry.totalEvents : 0}
               </span>
               <Button
                 variant="ghost"
@@ -347,16 +415,40 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
                 <ArrowRight className="h-3 w-3" />
               </Button>
             </div>
-            <div className="text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60 truncate">
-              <span>{eventStats?.byPriority?.high || 0} High Priority &bull; {eventStats?.byPriority?.medium || 0} Medium</span>
+            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 pt-1 border-t border-zinc-800/60 truncate">
+              <span className="text-red-400">{summary?.telemetry.highPriorityEvents || 0} High Priority</span>
+              <span>&bull;</span>
+              <span className="text-zinc-400">Past {timeRange}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Dual Feed: Active Incidents & Urgent Alerts Queue */}
+      {/* V2.1 Historical Trends Visualizations */}
+      {trends && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <AnalyticsTrendsChart
+            title="Alert Ingestion & Triage Velocity"
+            description={`Continuous hourly/daily alert distribution over the past ${timeRange}`}
+            timeRange={timeRange}
+            bucketInterval={trends.bucketInterval}
+            buckets={trends.buckets}
+            type="alerts"
+          />
+          <AnalyticsTrendsChart
+            title="Incident Escalation vs Resolution Velocity"
+            description={`Declared vs resolved incident volume over the past ${timeRange}`}
+            timeRange={timeRange}
+            bucketInterval={trends.bucketInterval}
+            buckets={trends.buckets}
+            type="incidents"
+          />
+        </div>
+      )}
+
+      {/* Operational Queues: Ongoing Security Incidents & Urgent Untriaged Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Feed 1: Ongoing Security Incidents */}
+        {/* Ongoing Incidents Feed */}
         <Card className="bg-zinc-900/30">
           <CardHeader className="p-4 pb-3 border-b border-zinc-800 flex flex-row items-center justify-between">
             <div>
@@ -374,7 +466,7 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
               onClick={() => onNavigate('incidents')}
               className="h-7 text-xs border-zinc-700 bg-zinc-900"
             >
-              View All ({incidentStats?.total || 0})
+              View All ({summary?.incidents.total || 0})
             </Button>
           </CardHeader>
           <CardContent className="p-0 divide-y divide-zinc-800/80">
@@ -414,7 +506,7 @@ export const SocDashboardView: React.FC<SocDashboardViewProps> = ({
           </CardContent>
         </Card>
 
-        {/* Feed 2: Urgent Alerts Awaiting Triage */}
+        {/* Untriaged Alerts Feed */}
         <Card className="bg-zinc-900/30">
           <CardHeader className="p-4 pb-3 border-b border-zinc-800 flex flex-row items-center justify-between">
             <div>

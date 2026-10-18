@@ -10,6 +10,8 @@ import { UserAdminView } from './components/admin/UserAdminView.tsx';
 import { ApiDocsView } from './components/docs/ApiDocsView.tsx';
 import { Shield } from 'lucide-react';
 
+import { RealtimeProvider } from './context/RealtimeContext.tsx';
+
 function MainApp() {
   const { user, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<'overview' | 'alerts' | 'incidents' | 'events' | 'admin' | 'docs'>('overview');
@@ -69,7 +71,7 @@ function MainApp() {
       </main>
 
       <footer className="border-t border-zinc-800/80 py-4 text-center text-xs text-zinc-500 font-mono">
-        NetGuard V1 &mdash; Snort Telemetry Management, Alert Triage & Incident Response Console
+        NetGuard V2.2 &mdash; Realtime SOC Analytics, Alert Triage & Incident Response Console
       </footer>
     </div>
   );
@@ -78,7 +80,9 @@ function MainApp() {
 export default function App() {
   return (
     <AuthProvider>
-      <MainApp />
+      <RealtimeProvider>
+        <MainApp />
+      </RealtimeProvider>
     </AuthProvider>
   );
 }

@@ -8,6 +8,7 @@ import {
   type NewInvestigationEntry,
   type InvestigationEntryType,
 } from '../../db/schema.ts';
+import { RealtimeGateway } from '../realtime/gateway.ts';
 
 export interface AddInvestigationEntryInput {
   incidentId: number;
@@ -63,10 +64,19 @@ export class InvestigationsService {
       author = u || null;
     }
 
-    return {
+    const enriched = {
       ...created,
       author,
     };
+
+    try {
+      RealtimeGateway.getInstance().broadcast('investigation:entry_added', {
+        incidentId: input.incidentId,
+        entry: enriched,
+      });
+    } catch {}
+
+    return enriched;
   }
 
   /**

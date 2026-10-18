@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useRealtime } from '../../context/RealtimeContext.tsx';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../ui/card.tsx';
 import { Badge } from '../ui/badge.tsx';
 import { Button } from '../ui/button.tsx';
@@ -24,6 +25,7 @@ import type { IncidentSeverity, IncidentStatus } from '../../db/schema.ts';
 
 export const IncidentsView: React.FC = () => {
   const { token, user } = useAuth();
+  const { subscribe } = useRealtime();
 
   // Data & Pagination
   const [incidentsList, setIncidentsList] = useState<any[]>([]);
@@ -84,6 +86,22 @@ export const IncidentsView: React.FC = () => {
   useEffect(() => {
     fetchIncidents();
   }, [fetchIncidents]);
+
+  // Realtime subscription for live incident updates
+  useEffect(() => {
+    const unsubscribe = subscribe('*', (msg) => {
+      if (
+        msg.event === 'incident:created' ||
+        msg.event === 'incident:status_changed' ||
+        msg.event === 'incident:assigned' ||
+        msg.event === 'investigation:entry_added' ||
+        msg.event === 'gateway:resync_required'
+      ) {
+        fetchIncidents();
+      }
+    });
+    return unsubscribe;
+  }, [subscribe, fetchIncidents]);
 
   const handleInspectIncident = async (incidentId: number) => {
     if (!token) return;

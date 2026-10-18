@@ -1,6 +1,7 @@
 import { eq, and, gte, lte, desc, count, ilike, or, sql } from 'drizzle-orm';
 import { db } from '../../db/index.ts';
 import { securityEvents, type SecurityEvent, type NewSecurityEvent } from '../../db/schema.ts';
+import { RealtimeGateway } from '../realtime/gateway.ts';
 
 export interface IngestEventInput {
   timestamp?: string | Date;
@@ -81,6 +82,20 @@ export class EventsService {
         console.warn('[EventsService] Failed to auto-create alert for security event:', err);
       }
     }
+
+    // Post-commit realtime broadcast
+    try {
+      RealtimeGateway.getInstance().broadcast('telemetry:event_ingested', {
+        id: createdEvent.id,
+        signatureId: createdEvent.signatureId,
+        signatureMessage: createdEvent.signatureMessage,
+        priority: createdEvent.priority,
+        protocol: createdEvent.protocol,
+        sourceIp: createdEvent.sourceIp,
+        destinationIp: createdEvent.destinationIp,
+        createdAt: createdEvent.createdAt.toISOString(),
+      });
+    } catch {}
 
     return createdEvent;
   }

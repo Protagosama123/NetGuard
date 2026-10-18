@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'node:path';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { initializeDatabase } from './src/db/index.ts';
 import { authRouter } from './src/server/auth/auth.controller.ts';
@@ -8,6 +9,8 @@ import { usersRouter } from './src/server/users/users.controller.ts';
 import { eventsRouter } from './src/server/events/events.controller.ts';
 import { alertsRouter } from './src/server/alerts/alerts.controller.ts';
 import { incidentsRouter } from './src/server/incidents/incidents.controller.ts';
+import { analyticsRouter } from './src/server/analytics/analytics.controller.ts';
+import { RealtimeGateway } from './src/server/realtime/gateway.ts';
 import { docsRouter } from './src/server/docs/swagger.ts';
 
 dotenv.config();
@@ -55,6 +58,9 @@ export async function createServer() {
   // Security Incidents API routes (V1)
   app.use('/api/incidents', incidentsRouter);
 
+  // SOC Analytics & MTTD API routes (V2.1)
+  app.use('/api/analytics', analyticsRouter);
+
   // OpenAPI / Swagger Documentation
   app.use('/api/docs', docsRouter);
 
@@ -77,14 +83,17 @@ export async function createServer() {
     });
   }
 
-  return { app, port };
+  const httpServer = http.createServer(app);
+  RealtimeGateway.getInstance().attach(httpServer);
+
+  return { app, httpServer, port };
 }
 
 // Start standalone server when executed directly
 if (process.env.NODE_ENV !== 'test') {
-  createServer().then(({ app, port }) => {
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`[NetGuard Backend] Listening on http://0.0.0.0:${port}`);
+  createServer().then(({ httpServer, port }) => {
+    httpServer.listen(port, '0.0.0.0', () => {
+      console.log(`[NetGuard Backend] Listening on http://0.0.0.0:${port} (WebSocket gateway on /ws)`);
     });
   }).catch((err) => {
     console.error('[NetGuard Backend] Startup error:', err);

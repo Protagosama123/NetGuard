@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useRealtime } from '../../context/RealtimeContext.tsx';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../ui/card.tsx';
 import { Badge } from '../ui/badge.tsx';
 import { Button } from '../ui/button.tsx';
@@ -22,6 +23,7 @@ import type { AlertSeverity, AlertStatus } from '../../db/schema.ts';
 
 export const AlertsView: React.FC = () => {
   const { token, user } = useAuth();
+  const { subscribe } = useRealtime();
 
   // Data & Pagination
   const [alertsList, setAlertsList] = useState<any[]>([]);
@@ -83,6 +85,20 @@ export const AlertsView: React.FC = () => {
   useEffect(() => {
     fetchAlerts();
   }, [fetchAlerts]);
+
+  // Realtime subscription for live alert updates
+  useEffect(() => {
+    const unsubscribe = subscribe('*', (msg) => {
+      if (
+        msg.event === 'alert:created' ||
+        msg.event === 'alert:status_changed' ||
+        msg.event === 'gateway:resync_required'
+      ) {
+        fetchAlerts();
+      }
+    });
+    return unsubscribe;
+  }, [subscribe, fetchAlerts]);
 
   const handleStatusChange = async (alertId: number, newStatus: AlertStatus) => {
     if (!token) return;

@@ -171,6 +171,17 @@ export const openApiSpec = {
         responses: { '200': { description: 'List of users' } },
       },
     },
+    '/api/users/audit': {
+      get: {
+        summary: 'Retrieve administrative audit log trail (ADMIN only) (V2.2)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 50 } },
+          { name: 'offset', in: 'query', required: false, schema: { type: 'integer', default: 0 } },
+        ],
+        responses: { '200': { description: 'List of audit log records' } },
+      },
+    },
     '/api/users/{id}/role': {
       patch: {
         summary: 'Update user role (ADMIN only)',
@@ -510,6 +521,85 @@ export const openApiSpec = {
           },
         },
         responses: { '201': { description: 'Investigation entry recorded' } },
+      },
+    },
+    '/api/analytics/summary': {
+      get: {
+        summary: 'Get consolidated SOC metrics and MTTD summary (V2.1)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'timeRange',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['24h', '7d', '30d'], default: '24h' },
+            description: 'Analytics time window',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Consolidated analytics summary',
+          },
+          '400': { description: 'Invalid query parameters' },
+          '401': { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/api/analytics/trends': {
+      get: {
+        summary: 'Get continuous time-series trend buckets for alerts and incidents (V2.1)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'timeRange',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['24h', '7d', '30d'], default: '24h' },
+            description: 'Analytics time window',
+          },
+          {
+            name: 'entity',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['alerts', 'incidents', 'all'], default: 'all' },
+            description: 'Filter entity type',
+          },
+        ],
+        responses: {
+          '200': { description: 'Continuous time-series trend buckets with interval zero-filling' },
+          '400': { description: 'Invalid query parameters' },
+          '401': { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/api/analytics/mttd': {
+      get: {
+        summary: 'Get detailed Mean Time to Detect (MTTD) statistics and distribution (V2.1)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'timeRange',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['24h', '7d', '30d'], default: '24h' },
+            description: 'Analytics time window',
+          },
+        ],
+        responses: {
+          '200': { description: 'MTTD latency statistics (average, median, min, max, sample count, buckets)' },
+          '400': { description: 'Invalid query parameters' },
+          '401': { description: 'Unauthorized' },
+        },
+      },
+    },
+    '/api/analytics/health': {
+      get: {
+        summary: 'Get operational subsystem health, database status, and queue pressure (V2.1)',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': { description: 'System health status and telemetry queue metrics' },
+          '401': { description: 'Unauthorized' },
+        },
       },
     },
   },

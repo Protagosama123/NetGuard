@@ -33,18 +33,26 @@
   - Operator administration console for admins.
   - OpenAPI 3.0 specification and Swagger UI.
 
-- **V1 — Security Operations (Current Milestone)**:
+- **V1 — Security Operations (Completed)**:
   - **Alert Management**: Separate actionable `alerts` from immutable raw `security_events`.
   - **Incident Management**: Multi-alert grouping, severity classification, and validated status lifecycle.
   - **Investigation Workflow**: Chronological findings, notes, actions taken, and containment records authored by operators.
   - **Ownership & Assignment**: Explicit incident ownership assigned to active analysts/admins.
   - **Basic SOC Dashboard**: Real-time operational queues and incident summaries via REST polling.
 
-- **V2+ — Enterprise & Automation (Explicitly Deferred)**:
-  - WebSockets / push notifications.
-  - Automated blocking / firewall integration.
-  - Advanced MTTR / MTTD analytics.
-  - Enterprise SIEM forwarding & syslog export.
+- **V2.1 — Analytics Foundations (Completed)**:
+  - Metric definitions and authoritative calculation rules.
+  - Mean Time to Detect (MTTD) timestamp semantics and latency formulas.
+  - Time-series trends (`24h`, `7d`, `30d`) with continuous interval zero-filling.
+  - Dedicated REST APIs (`/api/analytics/summary`, `/api/analytics/trends`, `/api/analytics/mttd`, `/api/analytics/health`).
+  - Frontend analytics visualizations, time-range controls, and component health.
+
+- **V2.2 — Realtime Integration & Finalization (Completed — Scope Frozen)**:
+  - Authenticated WebSocket gateway (`ws`) with JWT handshake.
+  - Transaction-safe domain event publication (`alert:*`, `incident:*`, `investigation:*`).
+  - Frontend live updating with automatic REST resynchronization and reconnect handling.
+  - Administrative audit logging and operational readiness.
+  - Master 15-phase end-to-end acceptance suite passed with 100% success. Scope complete and frozen.
 
 ---
 
@@ -56,7 +64,9 @@
 │   ├── 06-data-model.md                # Unified database schemas & relations
 │   ├── 08-alerts-and-incidents.md      # Lifecycles, states & workflows
 │   ├── 11-api-design.md                # Complete REST API contracts
-│   └── 15-frontend-v1.md               # Frontend architecture & navigation
+│   ├── 15-frontend-v1.md               # Frontend architecture & navigation
+│   ├── 16-v2.1-analytics-foundations.md# Analytics, trends & MTTD specifications
+│   └── 17-v2.2-realtime-integration-and-finalization.md # WebSockets & live SOC updates
 ├── src/
 │   ├── components/                     # React UI components
 │   │   ├── admin/                      # Operator administration views

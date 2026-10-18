@@ -11,6 +11,7 @@ import {
   type IncidentStatus,
   type Alert,
 } from '../../db/schema.ts';
+import { RealtimeGateway } from '../realtime/gateway.ts';
 
 export interface CreateIncidentInput {
   title: string;
@@ -143,6 +144,10 @@ export class IncidentsService {
         linkedAlerts.push(al);
       }
     }
+
+    try {
+      RealtimeGateway.getInstance().broadcast('incident:created', createdIncident);
+    } catch {}
 
     return {
       incident: createdIncident,
@@ -417,6 +422,15 @@ export class IncidentsService {
       .where(eq(incidents.id, id))
       .returning();
 
+    try {
+      RealtimeGateway.getInstance().broadcast('incident:status_changed', {
+        id: updated.id,
+        status: updated.status,
+        resolvedAt: updated.resolvedAt ? updated.resolvedAt.toISOString() : null,
+        updatedAt: updated.updatedAt.toISOString(),
+      });
+    } catch {}
+
     return updated;
   }
 
@@ -460,6 +474,13 @@ export class IncidentsService {
       })
       .where(eq(incidents.id, incidentId))
       .returning();
+
+    try {
+      RealtimeGateway.getInstance().broadcast('incident:assigned', {
+        id: updated.id,
+        assignedTo: updated.assignedTo,
+      });
+    } catch {}
 
     return updated;
   }
